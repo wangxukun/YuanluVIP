@@ -1,0 +1,8 @@
+{
+  "name": "Remix: LearnAfdian",
+  "description": "LearnAfdian - 爱发电会员管理与订阅自动激活系统",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
