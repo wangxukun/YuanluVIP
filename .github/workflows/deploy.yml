@@ -1,0 +1,90 @@
+name: Deploy to Alibaba Cloud ECS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout source code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      # 3. Install all dependencies (including devDependencies for build)
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Generate Prisma Client
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      # 5. Build production bundle (Vite frontend + esbuild server)
+      - name: Build production bundle
+        run: npm run build
+
+      # 6. Deploy to ECS via rsync over SSH
+      - name: Deploy to ECS
+        uses: easingthemes/ssh-deploy@v5
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.ECS_HOST }}
+          REMOTE_USER: ${{ secrets.ECS_USERNAME }}
+          REMOTE_PORT: ${{ secrets.ECS_SSH_PORT || '22' }}
+          SOURCE: "./"
+          TARGET: "/var/www/YuanluVIP"
+          EXCLUDE: >-
+            .git/,
+            .github/,
+            .claude/,
+            node_modules/,
+            .env,
+            .env.local,
+            db.json
+
+      # 7. Post-deploy: install production deps, generate Prisma, reload pm2
+      - name: Post-deploy setup & restart
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USERNAME }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          port: ${{ secrets.ECS_SSH_PORT || '22' }}
+          script: |
+            cd /var/www/YuanluVIP
+
+            # Ensure logs directory exists for pm2
+            mkdir -p /var/www/YuanluVIP/logs
+
+            # Ensure .env exists (first deploy needs manual creation)
+            if [ ! -f .env ]; then
+              echo "ERROR: .env file not found! Please create it manually on the server."
+              exit 1
+            fi
+
+            # Install production dependencies only
+            npm ci --omit=dev
+
+            # Generate Prisma Client for the server environment
+            npx prisma generate
+
+            # Reload or start pm2 process
+            if pm2 describe YuanluVIP > /dev/null 2>&1; then
+              pm2 reload ecosystem.config.cjs --env production
+            else
+              pm2 start ecosystem.config.cjs --env production
+            fi
+
+            # Save pm2 process list (survives server reboot)
+            pm2 save

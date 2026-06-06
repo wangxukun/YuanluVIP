@@ -1,0 +1,100 @@
+# ===================================================================
+# Nginx Configuration for YuanluVIP (www.wxkzd.cn)
+# ===================================================================
+# 部署步骤:
+#   1. 将此文件复制到 /etc/nginx/conf.d/wxkzd.conf
+#   2. 修改 ssl_certificate 和 ssl_certificate_key 路径为实际证书路径
+#   3. 执行: sudo nginx -t && sudo systemctl reload nginx
+# ===================================================================
+
+# HTTP → HTTPS 301 重定向
+server {
+    listen 80;
+    listen [::]:80;
+    server_name www.wxkzd.cn wxkzd.cn;
+
+    return 301 https://www.wxkzd.cn$request_uri;
+}
+
+# HTTPS 主配置
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name www.wxkzd.cn wxkzd.cn;
+
+    # ------ SSL 证书配置（请替换为实际路径）------
+    ssl_certificate     /etc/nginx/ssl/www.wxkzd.cn.pem;
+    ssl_certificate_key /etc/nginx/ssl/www.wxkzd.cn.key;
+
+    # SSL 安全参数
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5:!RC4;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # ------ 安全响应头 ------
+    add_header X-Content-Type-Options nosniff;
+    add_header X-Frame-Options SAMEORIGIN;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # ------ 反向代理到 Express (port 3000) ------
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # ------ 静态资源缓存（Vite 构建产物带 hash，可长期缓存）------
+    location /assets/ {
+        proxy_pass http://127.0.0.1:3000;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # ------ 爱发电 Webhook 端点（保证超时足够长）------
+    location /api/afdian-webhook {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Webhook 可能需要更长的超时
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+    }
+
+    # ------ Gzip 压缩 ------
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 1024;
+    gzip_types
+        text/plain
+        text/css
+        text/javascript
+        application/json
+        application/javascript
+        application/xml
+        image/svg+xml;
+
+    # ------ 日志 ------
+    access_log /var/log/nginx/wxkzd.access.log;
+    error_log  /var/log/nginx/wxkzd.error.log;
+}
