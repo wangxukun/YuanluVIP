@@ -184,7 +184,7 @@ app.post("/api/afdian-webhook", async (req: Request, res: Response) => {
       payload,
       error: "字段 data.type 必须为 'order' 并且包含订单数据"
     });
-    return res.status(200).json({ ec: 200, em: "忽略非订单通知类型" });
+    return res.status(200).json({ ec: 200, em: "ok", detail: "忽略非订单通知类型" });
   }
 
   const order = data.order;
@@ -226,7 +226,7 @@ app.post("/api/afdian-webhook", async (req: Request, res: Response) => {
       payload,
       error: logMessage
     });
-    return res.status(200).json({ ec: 200, em: "订单处理完成但未激活 (无有效邮箱留言)" });
+    return res.status(200).json({ ec: 200, em: "ok", detail: "订单处理完成但未激活 (无有效邮箱留言)" });
   }
 
   // 4. Activate User Membership
@@ -241,7 +241,7 @@ app.post("/api/afdian-webhook", async (req: Request, res: Response) => {
       error: activation.message,
       emailMatched: targetEmail
     });
-    return res.status(200).json({ ec: 200, em: `订单处理完成但未激活 (未找到匹配的用户): ${activation.message}` });
+    return res.status(200).json({ ec: 200, em: "ok", detail: `订单处理完成但未激活 (未找到匹配的用户): ${activation.message}` });
   }
 
   // 5. Log Success Webhook Entry
@@ -256,7 +256,7 @@ app.post("/api/afdian-webhook", async (req: Request, res: Response) => {
 
   return res.json({
     ec: 200,
-    em: "激活成功",
+    em: "ok",
     data: {
       activated: true,
       email: targetEmail,

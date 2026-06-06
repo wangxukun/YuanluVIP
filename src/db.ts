@@ -131,6 +131,15 @@ export const Database = {
 
     const { vipLevel, vipExpiry } = await getUserVipInfo(matched.userid);
 
+    let currentRole = matched.role || "USER";
+    if (currentRole === "PREMIUM" && vipLevel === VipLevel.NONE) {
+      await prisma.user.update({
+        where: { userid: matched.userid },
+        data: { role: "USER" }
+      });
+      currentRole = "USER";
+    }
+
     return {
       success: true,
       message: "登录成功！",
@@ -138,7 +147,7 @@ export const Database = {
         userid: matched.userid,
         email: matched.email,
         createdAt: matched.createAt.toISOString(),
-        role: matched.role || "USER",
+        role: currentRole,
         vipLevel,
         vipExpiry
       }
@@ -152,11 +161,20 @@ export const Database = {
 
     const { vipLevel, vipExpiry } = await getUserVipInfo(matched.userid);
 
+    let currentRole = matched.role || "USER";
+    if (currentRole === "PREMIUM" && vipLevel === VipLevel.NONE) {
+      await prisma.user.update({
+        where: { userid: matched.userid },
+        data: { role: "USER" }
+      });
+      currentRole = "USER";
+    }
+
     return {
       userid: matched.userid,
       email: matched.email,
       createdAt: matched.createAt.toISOString(),
-      role: matched.role || "USER",
+      role: currentRole,
       vipLevel,
       vipExpiry
     };
@@ -255,15 +273,21 @@ export const Database = {
     const updatedExpiryMs = currentExpiryTimestamp + daysAdded * 24 * 60 * 60 * 1000;
     const newExpiryDate = new Date(updatedExpiryMs);
 
-    // Create subscription record
-    await prisma.subscriptions.create({
-      data: {
-        userid: matched.userid,
-        subscriptionType: vipLevelToSubscriptionType(targetLevel),
-        startDate: new Date(),
-        endDate: newExpiryDate
-      }
-    });
+    // Create subscription record and update user role to PREMIUM
+    await prisma.$transaction([
+      prisma.subscriptions.create({
+        data: {
+          userid: matched.userid,
+          subscriptionType: vipLevelToSubscriptionType(targetLevel),
+          startDate: new Date(),
+          endDate: newExpiryDate
+        }
+      }),
+      prisma.user.update({
+        where: { userid: matched.userid },
+        data: { role: "PREMIUM" }
+      })
+    ]);
 
     return {
       success: true,
