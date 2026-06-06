@@ -16,15 +16,17 @@ export interface AfdianPlan {
   name: string;
   price: number;
   days: number;
+  months: number;       // months parameter for afdian URL (0 = one-time)
   desc: string;
-  afdianPlanId: string; // The corresponding plan_id on Afdian
+  planKey: string;      // tier key for plan ID lookup ("WEEKLY", "MONTHLY", etc.)
   features: string[];
 }
 
 export interface User {
-  id: string;
+  userid: string;
   email: string;
   createdAt: string;
+  role: string;
   vipLevel: VipLevel;
   vipExpiry: string | null;  // ISO Date string or null if not subscriber
   lastAfdianOrder?: string;

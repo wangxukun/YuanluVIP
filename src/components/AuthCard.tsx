@@ -199,7 +199,7 @@ export function AuthCard({ onAuthSuccess }: AuthCardProps) {
         </button>
 
         <p className="text-[10px] text-center text-slate-400">
-          * 我们承诺严格保障密码经过不可逆散列 SHA256 加密保存。
+          * 我们承诺严格保障密码经过不可逆散列 bcrypt 加密保存。
         </p>
       </form>
     </div>

@@ -1,0 +1,489 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  userid             String                @id @default(cuid())
+  password           String                @db.VarChar(255)
+  role               String?               @default("USER") @db.VarChar(50)
+  languagePreference String?               @default("zh-CN") @db.VarChar(50)
+  createAt           DateTime              @default(now()) @db.Timestamptz(6)
+  updateAt           DateTime              @updatedAt @db.Timestamptz(6)
+  isOnline           Boolean               @default(false)
+  lastActiveAt       DateTime?             @db.Timestamptz(6)
+  isCommentAllowed   Boolean               @default(true)
+  isLoginAllowed     Boolean               @default(true)
+  email              String                @unique @db.VarChar(255)
+  emailVerified      DateTime?             @db.Timestamptz(6)
+  loginCount         Int                   @default(0)
+  registerIp         String?               @db.VarChar(45)
+  VisitorLog         VisitorLog[]
+  achievements       achievements[]
+  comment_likes      comment_likes[]
+  comments           comments[]
+  discussion_threads discussion_threads[]
+  episode            episode[]
+  episode_favorites  episode_favorites[]
+  group_members      group_members[]
+  learning_paths     learning_paths[]
+  listening_history  listening_history[]
+  notifications      notifications[]
+  podcast_favorites  podcast_favorites[]
+  ratings            ratings[]
+  speech_recognition speech_recognition[]
+  study_groups       study_groups[]
+  subscriptions      subscriptions[]
+  daily_activities   user_daily_activity[]
+  user_profile              user_profile?
+  vocabulary                vocabulary[]
+  proofread_submissions     subtitle_proofread[]      @relation("ProofreadSubmitter")
+  proofread_reviews         subtitle_proofread[]      @relation("ProofreadReviewer")
+}
+
+/// 用户资料模型，存储用户的个人信息
+///
+/// 该模型包含了用户的详细个人资料信息，如昵称、头像、个人简介等。
+/// 通过 userid 与 User 模型建立一对一关系，实现用户基础信息与个人资料的分离。
+/// 当用户被删除时，其个人资料也会被级联删除。
+model user_profile {
+  /// 用户ID，作为主键，与 User 模型的 userid 字段关联
+  userid                   String  @id
+  /// 用户昵称，最大长度255个字符，可为空
+  nickname                 String? @db.VarChar(255)
+  /// 用户头像URL地址，默认值为"default_avatar_url"，最大长度255个字符，可为空
+  avatarUrl                String? @default("default_avatar_url") @db.VarChar(255)
+  /// 用户个人简介或签名，可为空
+  bio                      String?
+  /// 用户学习等级标识，最大长度50个字符，可为空
+  learnLevel               String? @db.VarChar(50)
+  /// 头像文件名，用于本地存储时的文件标识，最大长度255个字符，可为空
+  avatarFileName           String? @db.VarChar(255)
+  dailyStudyGoalMins       Int     @default(30)
+  weeklyListeningGoalHours Int     @default(5)
+  weeklyWordsGoal          Int     @default(50)
+  User                     User    @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 成就模型，存储用户所获得的成就信息
+model achievements {
+  achievementid   Int       @id @default(autoincrement())
+  userid          String?
+  achievementName String    @db.VarChar(255)
+  achievementDate DateTime? @default(now()) @db.Timestamptz(6)
+  User            User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 广告模型，存储用户所展示的广告信息
+model advertisements {
+  adid      Int       @id @default(autoincrement())
+  adTitle   String    @db.VarChar(255)
+  adContent String?
+  adUrl     String?   @db.VarChar(255)
+  startAt   DateTime? @default(now()) @db.Timestamptz(6)
+  endAt     DateTime? @db.Timestamptz(6)
+}
+
+/// 播客模型，存储播客信息
+model podcast {
+  podcastid         String              @id @default(cuid())
+  title             String              @unique @db.VarChar(255)
+  coverUrl          String              @default("default_cover_url") @db.VarChar(255)
+  coverFileName     String?             @db.VarChar(255)
+  platform          String?             @db.VarChar(255)
+  description       String?
+  parentPodcastid   String?
+  isEditorPick      Boolean?            @default(false)
+  followerCount     Int                 @default(0)
+  totalPlays        Int                 @default(0)
+  createAt          DateTime            @default(now()) @db.Timestamptz(6)
+  episode           episode[]
+  podcast           podcast?            @relation("podcastTopodcast", fields: [parentPodcastid], references: [podcastid], onUpdate: NoAction)
+  otherPodcast      podcast[]           @relation("podcastTopodcast")
+  podcast_favorites podcast_favorites[]
+  tags              tag[]               @relation("podcastTotag")
+
+  @@index([totalPlays(sort: Desc)])
+  @@index([createAt(sort: Desc)])
+}
+
+/// 播客评论模型，存储播客评论信息
+model comments {
+  commentid   Int             @id @default(autoincrement())
+  userid      String?
+  commentText String?
+  commentAt   DateTime?       @default(now()) @db.Timestamptz(6)
+  episodeid   String?
+  parentId    Int?
+  likes       comment_likes[]
+  episode     episode?        @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+  parent      comments?       @relation("CommentReplies", fields: [parentId], references: [commentid], onDelete: Cascade, onUpdate: NoAction)
+  replies     comments[]      @relation("CommentReplies")
+  User        User?           @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 评论点赞模型
+model comment_likes {
+  likeid    Int      @id @default(autoincrement())
+  userid    String
+  commentid Int
+  likedAt   DateTime @default(now()) @db.Timestamptz(6)
+  comment   comments @relation(fields: [commentid], references: [commentid], onDelete: Cascade)
+  User      User     @relation(fields: [userid], references: [userid], onDelete: Cascade)
+
+  @@unique([userid, commentid])
+}
+
+/// 讨论模型，存储讨论信息
+model discussion_threads {
+  threadid      Int       @id @default(autoincrement())
+  userid        String?
+  threadTitle   String    @db.VarChar(255)
+  threadContent String?
+  postAt        DateTime? @default(now()) @db.Timestamptz(6)
+  episodeid     String?
+  episode       episode?  @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+  User          User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 播客剧集模型，存储用户订阅的播客信息
+model episode {
+  episodeid           String                @id @default(cuid())
+  title               String                @db.VarChar(255)
+  coverUrl            String                @default("default_cover_url") @db.VarChar(255)
+  description         String?
+  audioUrl            String                @db.VarChar(255)
+  uploaderid          String?
+  createAt            DateTime?             @default(now()) @db.Timestamptz(6)
+  updateAt            DateTime?             @db.Timestamptz(6)
+  status              String?               @default("unpublished") @db.VarChar(50)
+  isExclusive         Boolean?              @default(false)
+  subtitleEnUrl       String?               @db.VarChar(255)
+  subtitleZhUrl       String?               @db.VarChar(255)
+  audioFileName       String?               @db.VarChar(255)
+  coverFileName       String?               @db.VarChar(255)
+  subtitleEnFileName  String?               @db.VarChar(255)
+  subtitleZhFileName  String?               @db.VarChar(255)
+  duration            Int                   @default(0)
+  publishAt           DateTime              @default(dbgenerated("CURRENT_DATE")) @db.Date
+  isCommentEnabled    Boolean?              @default(true)
+  podcastid           String?
+  playCount           Int                   @default(0)
+  difficulty          String?               @default("General") @db.VarChar(50)
+  comments            comments[]
+  discussion_threads  discussion_threads[]
+  podcast             podcast?              @relation(fields: [podcastid], references: [podcastid], onUpdate: NoAction)
+  User                User?                 @relation(fields: [uploaderid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+  episode_favorites   episode_favorites[]
+  learning_path_items learning_path_items[]
+  listening_history   listening_history[]
+  quizzes             quizzes[]
+  ratings             ratings[]
+  speech_recognition  speech_recognition[]
+  vocabulary            vocabulary[]
+  tags                  tag[]                 @relation("episodeTotag")
+  subtitle_proofreads   subtitle_proofread[]
+}
+
+/// 播客剧集收藏模型，存储用户收藏的剧集信息
+model episode_favorites {
+  favoriteid   Int       @id @default(autoincrement())
+  userid       String?
+  episodeid    String?
+  favoriteDate DateTime? @default(now()) @db.Timestamptz(6)
+  episode      episode?  @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+  User         User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userid, episodeid])
+}
+
+/// 播客收藏模型，存储用户收藏的播客信息
+model podcast_favorites {
+  favoriteid   Int       @id @default(autoincrement())
+  userid       String?
+  podcastid    String?
+  favoriteDate DateTime? @default(now()) @db.Timestamptz(6)
+  podcast      podcast?  @relation(fields: [podcastid], references: [podcastid], onDelete: Cascade, onUpdate: NoAction)
+  User         User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userid, podcastid])
+}
+
+/// 标签模型，存储标签信息
+model tag {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique @db.VarChar(50)
+  createdAt DateTime  @default(now()) @map("created_at")
+  episodes  episode[] @relation("episodeTotag")
+  podcasts  podcast[] @relation("podcastTotag")
+
+  @@map("tags")
+}
+
+/// 学习路径
+model learning_paths {
+  pathid      Int                   @id @default(autoincrement())
+  userid      String?
+  pathName    String                @db.VarChar(255)
+  creationAt  DateTime?             @default(now()) @db.Timestamptz(6)
+  description String?
+  isPublic    Boolean               @default(false)
+  items       learning_path_items[]
+  User        User?                 @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 路径内容表
+model learning_path_items {
+  id        Int            @id @default(autoincrement())
+  pathid    Int
+  episodeid String
+  order     Int            @default(0)
+  addedAt   DateTime       @default(now())
+  episode   episode        @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade)
+  path      learning_paths @relation(fields: [pathid], references: [pathid], onDelete: Cascade)
+
+  @@index([pathid, order])
+}
+
+/// 听播历史记录模型，用于追踪用户收听剧集的历史
+///
+/// 该模型记录用户对剧集的收听情况，包括收听时间、进度等信息。
+/// 支持断点续传功能，允许用户暂停后继续收听，同时确保
+/// 每个用户对每集只有一条记录。
+///
+/// 字段说明：
+/// - historyid: 历史记录唯一标识符，自动递增
+/// - userid:关联的用户ID
+/// - episodeid: 关联的剧集ID
+/// - listenAt: 开始收听的时间，默认为当前时间
+/// - progressSeconds: 已收听的秒数，用于断点续传功能// <--- [修复关键点] 传入 userStats
+/// - isFinished: 标识是否已完成收听/// - episode: 关联的剧集对象
+/// - User: 关联的用户对象
+///
+/// 约束说明：
+/// - 在userid和episodeid上创建复合唯一索引，确保每个用户对每集只有一条记录
+model listening_history {
+  historyid       Int       @id @default(autoincrement())
+  userid          String?
+  listenAt        DateTime? @default(now()) @db.Timestamptz(6)
+  episodeid       String?
+  isFinished      Boolean   @default(false)
+  progressSeconds Float     @default(0)
+  episode         episode?  @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+  User            User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userid, episodeid])
+}
+
+/// 通知模型，存储用户通知信息
+model notifications {
+  notificationid   Int       @id @default(autoincrement())
+  userid           String?
+  notificationText String?
+  notificationAt   DateTime? @default(now()) @db.Timestamptz(6)
+  isRead           Boolean?  @default(false)
+  /// 通知关联的目标页面 URL，点击通知后跳转的路径
+  targetUrl        String?   @db.VarChar(500)
+  /// 通知类型，例如：COMMENT（评论）、LIKE（点赞）、SYSTEM（系统）、ACHIEVEMENT（成就）等
+  type             String?   @default("SYSTEM") @db.VarChar(50)
+  /// 关联外部实体的 ID（例如 episodeId, commentId, achievementId），实现多态关联
+  referenceId      String?   @db.VarChar(255)
+  /// 关联外部实体的类型（例如 "EPISODE", "COMMENT", "ACHIEVEMENT"）
+  referenceType    String?   @db.VarChar(50)
+  User             User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 测验题
+model quizzes {
+  quizid        Int      @id @default(autoincrement())
+  question      String
+  options       Json?
+  correctAnswer String   @db.VarChar(255)
+  episodeid     String?
+  episode       episode? @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 评分模型，存储用户对剧集的评分信息
+model ratings {
+  ratingid    Int       @id @default(autoincrement())
+  userid      String?
+  ratingDate  DateTime? @default(now()) @db.Timestamptz(6)
+  episodeid   String?
+  ratingValue Int?
+  episode     episode?  @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+  User        User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 语音识别结果模型，用于存储用户语音识别的记录和评估
+///
+/// 该模型保存用户语音输入的识别结果及其准确度评分，
+/// 并关联到相应的剧集和原文内容，用于语言学习中的发音练习。
+///
+/// 字段说明：
+/// - recognitionid: 识别记录唯一标识符，自动递增
+/// - userid: 关联的用户ID
+/// - episodeid: 关联的剧集ID
+/// - speechText: 识别出的用户语音文本
+/// - accuracyScore: 语音识别准确度评分
+/// - targetText: 对应的原文内容
+/// - targetStartTime: 原文内容在音频中的起始时间（秒）
+/// - recognitionDate: 识别记录创建时间，默认为当前时间
+/// - episode: 关联的剧集对象
+/// - User: 关联的用户对象
+model speech_recognition {
+  recognitionid   Int       @id @default(autoincrement())
+  userid          String?
+  recognitionDate DateTime? @default(now()) @db.Timestamptz(6)
+  accuracyScore   Float?
+  episodeid       String?
+  speechText      String?
+  targetStartTime Int?
+  targetText      String?
+  episode         episode?  @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+  User            User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 学习组模型，用于存储用户学习组信息
+model study_groups {
+  groupid       Int             @id @default(autoincrement())
+  groupName     String          @db.VarChar(255)
+  creatorid     String?
+  creationAt    DateTime?       @default(now()) @db.Timestamptz(6)
+  description   String?
+  inviteCode    String?         @unique
+  group_members group_members[]
+  User          User?           @relation(fields: [creatorid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 小组成员表
+model group_members {
+  id       Int          @id @default(autoincrement())
+  groupid  Int
+  userid   String
+  role     String       @default("MEMBER")
+  joinedAt DateTime     @default(now())
+  group    study_groups @relation(fields: [groupid], references: [groupid], onDelete: Cascade)
+  User     User         @relation(fields: [userid], references: [userid], onDelete: Cascade)
+
+  @@unique([groupid, userid])
+}
+
+/// 订阅模型，用于存储用户订阅信息
+model subscriptions {
+  subscriptionid   Int       @id @default(autoincrement())
+  userid           String?
+  subscriptionType String    @db.VarChar(50)
+  startDate        DateTime? @default(now()) @db.Timestamptz(6)
+  endDate          DateTime? @db.Timestamptz(6)
+  User             User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+}
+
+/// 词汇模型，用于存储用户词汇信息
+model vocabulary {
+  vocabularyid    Int       @id @default(autoincrement())
+  userid          String?
+  word            String    @db.VarChar(255)
+  definition      String?
+  addedDate       DateTime? @default(now()) @db.Timestamptz(6)
+  contextSentence String?
+  episodeid       String?
+  nextReviewAt    DateTime? @default(now()) @db.Timestamptz(6)
+  proficiency     Int       @default(0)
+  timestamp       Int?
+  translation     String?
+  dictUrl         String?   @db.VarChar(500)
+  mobileUrl       String?   @db.VarChar(500)
+  speakUrl        String?   @db.VarChar(500)
+  webUrl          String?   @db.VarChar(500)
+  episode         episode?  @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade, onUpdate: NoAction)
+  User            User?     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userid, episodeid])
+}
+
+/// 验证码模型，用于存储用户验证码信息
+model captcha {
+  id        String   @id @default(cuid())
+  code      String
+  answer    String
+  expiresAt DateTime @db.Timestamptz(3)
+  createAt  DateTime @default(now()) @db.Timestamptz(3)
+}
+
+/// 短信验证码模型，用于存储用户短信验证码信息
+model sms_code {
+  id       Int      @id @default(autoincrement())
+  phone    String   @db.VarChar(15)
+  code     String   @db.VarChar(6)
+  createAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+}
+
+/// 电子邮件验证
+model verification_code {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+/// 用户每日活动统计表
+/// 用于精确追踪每一天的学习时长、活跃状态，支持打卡(Streak)和图表分析
+model user_daily_activity {
+  id               String   @id @default(cuid())
+  userid           String
+  date             DateTime @db.Date
+  listeningSeconds Int      @default(0)
+  wordsLearned     Int      @default(0)
+  isActive         Boolean  @default(false)
+  createAt         DateTime @default(now()) @db.Timestamptz(6)
+  updateAt         DateTime @updatedAt @db.Timestamptz(6)
+  User             User     @relation(fields: [userid], references: [userid], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userid, date])
+  @@index([userid, date(sort: Desc)])
+}
+
+/// 访客/用户访问日志表
+model VisitorLog {
+  id        String   @id @default(cuid())
+  ip        String?  @db.VarChar(45)
+  location  String?  @db.VarChar(100)
+  userAgent String?
+  path      String   @db.VarChar(255)
+  userid    String?
+  createAt  DateTime @default(now()) @db.Timestamptz(6)
+  User      User?    @relation(fields: [userid], references: [userid])
+
+  @@index([createAt(sort: Desc)])
+  @@index([ip])
+  @@index([userid])
+}
+
+/// 字幕校对请求模型
+/// 存储用户提交的字幕校对修改，支持管理员审核流程
+model subtitle_proofread {
+  id              Int       @id @default(autoincrement())
+  episodeid       String
+  subtitleIndex   Int       /// 字幕段落索引 (对应 SRT 文件中的 id)
+  originalTextEn  String    /// 原始英文内容
+  originalTextZh  String    /// 原始中文内容
+  modifiedTextEn  String    /// 修改后的英文内容
+  modifiedTextZh  String    /// 修改后的中文内容
+  status          String    @default("PENDING") @db.VarChar(20) /// PENDING | APPROVED | REJECTED
+  submitterId     String    /// 提交者用户ID
+  reviewerId      String?   /// 审核者用户ID
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  reviewedAt      DateTime? @db.Timestamptz(6)
+
+  episode         episode   @relation(fields: [episodeid], references: [episodeid], onDelete: Cascade)
+  submitter       User      @relation("ProofreadSubmitter", fields: [submitterId], references: [userid], onDelete: Cascade)
+  reviewer        User?     @relation("ProofreadReviewer", fields: [reviewerId], references: [userid], onDelete: SetNull)
+
+  @@index([episodeid])
+  @@index([status])
+}

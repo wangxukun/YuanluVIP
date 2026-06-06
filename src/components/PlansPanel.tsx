@@ -4,9 +4,10 @@
  */
 
 import React, { useState } from "react";
-import { Check, ClipboardCopy, Send, ArrowUpRight, HelpCircle, UserCheck } from "lucide-react";
+import { ClipboardCopy, Send, ArrowUpRight, HelpCircle, UserCheck, AlertTriangle } from "lucide-react";
 import { AFDIAN_PLANS } from "../plans.js";
 import { VipLevel, User } from "../types.js";
+import { buildAfdianPaymentUrl, getAfdianPlanId, buildRemark } from "../lib/afdian.js";
 
 interface PlansPanelProps {
   currentUser: User | null;
@@ -15,21 +16,12 @@ interface PlansPanelProps {
 
 export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
   const [copied, setCopied] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<typeof AFDIAN_PLANS[0] | null>(null);
 
   const handleCopyEmail = () => {
     if (!currentUser) return;
     navigator.clipboard.writeText(currentUser.email);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handePlanSelect = (plan: typeof AFDIAN_PLANS[0]) => {
-    setSelectedPlan(plan);
-    if (currentUser) {
-      // Auto copy the email for the user's convenience
-      navigator.clipboard.writeText(currentUser.email);
-    }
   };
 
   const getLevelBadge = (level: VipLevel) => {
@@ -49,7 +41,7 @@ export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
 
   return (
     <div id="plans-grid-root" className="space-y-10">
-      {/* 📧 Quick copy notice block for logged-in user */}
+      {/* Email copy banner for logged-in user */}
       {currentUser ? (
         <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-md flex flex-col md:flex-row justify-between items-center gap-6 border border-slate-800">
           <div className="space-y-1 text-center md:text-left">
@@ -58,7 +50,7 @@ export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
               当前已登录用户身份
             </span>
             <h4 className="text-lg font-bold font-sans">充值激活邮箱：<span className="text-yellow-400 font-mono underline">{currentUser.email}</span></h4>
-            <p className="text-xs text-slate-400">为了秒级自动激活，请务必保证在爱发电支付时的留言备注填写此相同的邮箱地址！</p>
+            <p className="text-xs text-slate-400">通过 <span className="text-orange-400 font-bold italic">爱发电</span> 无缝激活您的 <span className="text-orange-400 font-bold italic"> 远路播客 </span> 会员资格。选择合适您的方案后，系统将自动在爱发电支付留言中预填您的邮箱，实现秒级自动激活！</p>
           </div>
           <button
             onClick={handleCopyEmail}
@@ -75,7 +67,7 @@ export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
               <HelpCircle className="w-4 h-4 text-orange-600" />
               未检测到用户登录信息
             </h4>
-            <p className="text-xs text-orange-900/85">目前您还是游客状态。在爱发电充值时必须填写您注册在袁路站点的对应邮箱，否则无法进行自动匹配激活。</p>
+            <p className="text-xs text-orange-900/85">目前您还是游客状态。在爱发电充值时必须填写您注册在远路播客站点的对应邮箱，否则无法进行自动匹配激活。</p>
           </div>
           <button
             onClick={onNavigateToAuth}
@@ -86,23 +78,24 @@ export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
         </div>
       )}
 
-      {/* 💳 Plans Cards Section */}
+      {/* Plans Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {AFDIAN_PLANS.map((plan) => {
           const badge = getLevelBadge(plan.level);
-          const isSelected = selectedPlan?.level === plan.level;
           const isMonthly = plan.level === VipLevel.MONTHLY;
+          const planId = getAfdianPlanId(plan.planKey);
+          const remark = currentUser ? buildRemark(currentUser.email) : "";
+          const paymentUrl = planId && currentUser
+            ? buildAfdianPaymentUrl({ planId, months: plan.months, remark })
+            : null;
 
           return (
             <div
               key={plan.level}
-              onClick={() => handePlanSelect(plan)}
-              className={`rounded-2xl p-6 flex flex-col relative transition-all duration-300 cursor-pointer group justify-between ${
+              className={`rounded-2xl p-6 flex flex-col relative transition-all duration-300 group justify-between ${
                 isMonthly
                   ? "bg-orange-50 border-2 border-orange-500 shadow-sm"
-                  : isSelected
-                    ? "bg-white border-2 border-orange-500 shadow-md scale-[1.01]"
-                    : "bg-white border border-slate-200 hover:border-orange-200 shadow-sm"
+                  : "bg-white border border-slate-200 hover:border-orange-200 shadow-sm"
               }`}
             >
               {/* Most popular indicator for monthly */}
@@ -112,7 +105,7 @@ export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
                 </div>
               )}
 
-              {/* Card top details */}
+              {/* Card details */}
               <div className="space-y-5 flex-1 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start mb-6">
@@ -132,20 +125,44 @@ export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
                   </ul>
                 </div>
 
-                {/* Action triggering purchase */}
+                {/* Action: direct afdian payment link */}
                 <div className="pt-4 mt-6 border-t border-slate-100">
-                  {isMonthly ? (
-                    <button className="w-full py-3 bg-orange-500 text-white rounded-xl font-bold text-sm shadow-md shadow-orange-200 hover:bg-orange-600 transition-colors cursor-pointer">
-                      {isSelected ? "已选定此方案" : "Subscribe Now"}
+                  {!currentUser ? (
+                    <button
+                      onClick={onNavigateToAuth}
+                      className={`w-full py-3 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+                        isMonthly
+                          ? "bg-orange-500 text-white"
+                          : "bg-slate-100 text-slate-800 hover:bg-orange-500 hover:text-white"
+                      }`}
+                    >
+                      登录后订阅
                     </button>
+                  ) : !planId ? (
+                    <div className="flex items-center justify-center gap-1 text-amber-600 text-xs py-3">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      请先配置 Plan ID
+                    </div>
                   ) : (
-                    <button className={`w-full py-3 rounded-xl font-bold text-sm transition-all cursor-pointer ${
-                      isSelected 
-                        ? "bg-orange-500 text-white" 
-                        : "bg-slate-100 text-slate-800 group-hover:bg-orange-500 group-hover:text-white"
-                    }`}>
-                      {isSelected ? "已选定此方案" : "Select Tier"}
-                    </button>
+                    <a
+                      href={paymentUrl!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
+                        isMonthly
+                          ? "bg-orange-500 text-white hover:bg-orange-600 shadow-md shadow-orange-200"
+                          : "bg-slate-100 text-slate-800 hover:bg-orange-500 hover:text-white"
+                      }`}
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      一键订阅
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                  {currentUser && planId && (
+                    <p className="text-[10px] text-slate-400 text-center mt-2">
+                      点击后将跳转至爱发电完成支付，留言已预填邮箱 <code className="text-orange-500">{currentUser.email}</code>
+                    </p>
                   )}
                 </div>
               </div>
@@ -153,53 +170,6 @@ export function PlansPanel({ currentUser, onNavigateToAuth }: PlansPanelProps) {
           );
         })}
       </div>
-
-      {/* 🔗 Detailed Afdian redirect dialog when plan is selected */}
-      {selectedPlan && (
-        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-6 shadow-sm space-y-4 animate-fade-in">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="space-y-1">
-              <span className="text-xs bg-orange-200 text-orange-700 font-bold px-2.5 py-0.5 rounded-full">
-                赞助调转向导已激活
-              </span>
-              <h4 className="text-lg font-bold text-slate-900">
-                您即将赞助：<span className="text-orange-600 font-black">{selectedPlan.name} (¥{selectedPlan.price} / {selectedPlan.days}天)</span>
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                点击下方按钮将打开 <strong>爱发电 - 远路播客的主页</strong> 主赞助方案界面。
-                请选择对应的面额 <strong>¥{selectedPlan.price}</strong> 
-                并通过支付宝、微信完成支付。系统已为您 <strong>生成并默认复制了</strong> 会员充值的邮箱备注。
-              </p>
-            </div>
-            {currentUser && (
-              <div className="flex-shrink-0 bg-white border border-orange-200 p-4 rounded-xl text-center shadow-xs">
-                <span className="block text-[10px] text-slate-400 uppercase font-sans tracking-wide">赞助强制留言信息</span>
-                <span className="block font-mono font-bold text-sm text-orange-950 select-all my-1 px-3 py-1 bg-orange-50 border border-orange-150 rounded-lg">{currentUser.email}</span>
-                <span className="block text-[10px] text-orange-600 font-bold">✨ 已全自动复制！</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-3 pt-2">
-            <a
-              href="https://afdian.com/a/wxkzd"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-sm py-4 px-6 rounded-2xl flex items-center justify-center gap-2 transition active:scale-95 shadow-md shadow-orange-100"
-            >
-              <Send className="w-4 h-4" />
-              一键前往「爱发电 - 远路播客」主页支付
-              <ArrowUpRight className="w-4 h-4" />
-            </a>
-            <button
-              onClick={() => setSelectedPlan(null)}
-              className="px-6 py-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 font-bold text-xs transition cursor-pointer"
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

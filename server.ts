@@ -30,13 +30,13 @@ console.log(`[YuanluPro Server] Initializing with AFDian Webhook Secret: "${AFDI
 // --- API ROUTES ---
 
 // 1. Auth: User Register
-app.post("/api/auth/register", (req: Request, res: Response) => {
+app.post("/api/auth/register", async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ success: false, message: "邮件与密匙/密码不能为空！" });
   }
 
-  const result = Database.registerUser(email, password);
+  const result = await Database.registerUser(email, password);
   if (!result.success) {
     return res.status(400).json(result);
   }
@@ -44,13 +44,13 @@ app.post("/api/auth/register", (req: Request, res: Response) => {
 });
 
 // 2. Auth: User Login
-app.post("/api/auth/login", (req: Request, res: Response) => {
+app.post("/api/auth/login", async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ success: false, message: "邮件与密匙/密码不能为空！" });
   }
 
-  const result = Database.loginUser(email, password);
+  const result = await Database.loginUser(email, password);
   if (!result.success) {
     return res.status(400).json(result);
   }
@@ -58,13 +58,13 @@ app.post("/api/auth/login", (req: Request, res: Response) => {
 });
 
 // 3. User Details Info Update/Poll (Get latest VIP details)
-app.get("/api/auth/user", (req: Request, res: Response) => {
+app.get("/api/auth/user", async (req: Request, res: Response) => {
   const { email } = req.query;
   if (!email || typeof email !== "string") {
     return res.status(400).json({ success: false, message: "参数邮箱不能为空！" });
   }
 
-  const user = Database.getUser(email);
+  const user = await Database.getUser(email);
   if (!user) {
     return res.status(404).json({ success: false, message: "未找到该用户！" });
   }
@@ -87,7 +87,7 @@ app.post("/api/webhook/logs/clear", (req: Request, res: Response) => {
 // 6. AFDian Webhook Activate会员接收端点
 // This is the active core webhook endpoint for YuanluPro.
 // AFDian will call this exact path when payments are successfully finished.
-app.post("/api/afdian-webhook", (req: Request, res: Response) => {
+app.post("/api/afdian-webhook", async (req: Request, res: Response) => {
   const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "Unknown";
   console.log(`[Webhook] Received request from IP: ${ip}`);
 
@@ -230,7 +230,7 @@ app.post("/api/afdian-webhook", (req: Request, res: Response) => {
   }
 
   // 4. Activate User Membership
-  const activation = Database.activateMembershipByEmail(targetEmail, parseFloat(total_amount), out_trade_no);
+  const activation = await Database.activateMembershipByEmail(targetEmail, parseFloat(total_amount), out_trade_no);
 
   if (!activation.success) {
     const logErr = Database.logWebhook({
@@ -268,8 +268,8 @@ app.post("/api/afdian-webhook", (req: Request, res: Response) => {
 });
 
 // 7. Get All Users (for dashboard/sim users lookup)
-app.get("/api/users", (req: Request, res: Response) => {
-  const users = Database.getAllUsers();
+app.get("/api/users", async (req: Request, res: Response) => {
+  const users = await Database.getAllUsers();
   return res.json({ success: true, users });
 });
 
